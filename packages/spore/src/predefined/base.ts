@@ -11,7 +11,6 @@ export enum SporeScript {
 
 export type ScriptInfo = Pick<ccc.Script, "codeHash" | "hashType"> & {
   cellDeps: ccc.CellDepInfoLike[];
-  dynamicCelldep?: ccc.ScriptLike;
   cobuild?: boolean;
 };
 

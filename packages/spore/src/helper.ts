@@ -3,28 +3,29 @@ import { ccc } from "@ckb-ccc/core";
 export async function searchOneCellByLock(
   signer: ccc.Signer,
 ): Promise<ccc.Cell | undefined> {
-  let liveCell: ccc.Cell | undefined = undefined;
-  for await (const cell of signer.findCells({
-    scriptLenRange: [0, 1],
-    outputDataLenRange: [0, 1],
-  })) {
-    liveCell = cell;
-    break;
+  for await (const cell of signer.findCells(
+    {
+      scriptLenRange: [0, 1],
+      outputDataLenRange: [0, 1],
+    },
+    true,
+    undefined,
+    1,
+  )) {
+    return cell;
   }
-  return liveCell;
 }
 
 export async function injectOneCapacityCell(
   signer: ccc.Signer,
   tx: ccc.Transaction,
-) {
+): Promise<void> {
   const liveCell = await searchOneCellByLock(signer);
   if (!liveCell) {
-    const address = await signer.getRecommendedAddress();
-    throw new Error("No live cell found in address: " + address);
+    throw new Error("No live cell found");
   }
-  let txSkeleton = ccc.Transaction.from(tx);
-  txSkeleton.inputs.push(
+
+  tx.inputs.push(
     ccc.CellInput.from({
       previousOutput: liveCell.outPoint,
       ...liveCell,
@@ -33,12 +34,13 @@ export async function injectOneCapacityCell(
 }
 
 export function computeTypeId(
-  tx: ccc.TransactionLike,
-  outputIndex: number,
+  txLike: ccc.TransactionLike,
+  outputIndex: ccc.NumLike,
 ): ccc.Hex {
-  const firstInput = tx.inputs ? tx.inputs[0] : void 0;
-  if (!firstInput) {
+  const tx = ccc.Transaction.from(txLike);
+
+  if (tx.inputs.length === 0) {
     throw new Error("No input found in transaction");
   }
-  return ccc.hashTypeId(firstInput, outputIndex);
+  return ccc.hashTypeId(tx.inputs[0], outputIndex);
 }

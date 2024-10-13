@@ -17,8 +17,7 @@ import {
   SporeScriptInfo,
   buildSporeCellDep,
   buildSporeScript,
-  cobuildRequired,
-  findExistedSporeCellAndCelldep,
+  findExistedSporeCellAndCellDep,
 } from "../predefined/index.js";
 
 /**
@@ -96,8 +95,8 @@ export async function createSpores(params: {
     }
     processedCluster.push(ccc.hexFrom(data.clusterId));
 
-    const { cell: cluster, celldep: clusterCelldep } =
-      await findExistedSporeCellAndCelldep(
+    const { cell: cluster, cellDep: clusterCellDep } =
+      await findExistedSporeCellAndCellDep(
         signer.client,
         SporeScript.Cluster,
         data.clusterId,
@@ -144,12 +143,12 @@ export async function createSpores(params: {
           }),
         );
         tx.addOutput(cluster.cellOutput, cluster.outputData);
-        // note: add cluster as celldep, which will be used in Spore contract
+        // note: add cluster as cellDep, which will be used in Spore contract
         tx.addCellDeps({
           outPoint: cluster.outPoint,
           depType: "code",
         });
-        await tx.addCellDepInfos(signer.client, clusterCelldep);
+        tx.addCellDeps(clusterCellDep);
         const transferCluster = assembleTransferClusterAction(
           cluster.cellOutput,
           cluster.cellOutput,
@@ -160,16 +159,13 @@ export async function createSpores(params: {
     }
   }
 
-  // complete celldeps and cobuild actions
-  await tx.addCellDepInfos(
-    signer.client,
+  // complete cellDeps and cobuild actions
+  tx.addCellDeps(
     await buildSporeCellDep(signer.client, SporeScript.Spore, sporeScriptInfo),
   );
 
   return {
-    tx: await (cobuildRequired(tx)
-      ? prepareSporeTransaction(signer, tx, actions)
-      : signer.prepareTransaction(tx)),
+    tx: await prepareSporeTransaction(signer, tx, actions),
     ids,
   };
 }
@@ -201,16 +197,14 @@ export async function transferSpores(params: {
   const actions = [];
   const tx = ccc.Transaction.from(params.tx ?? {});
 
-  // build spore cell
-  let celldeps: Set<ccc.CellDepInfo> = new Set();
   for (const { id, to } of spores) {
-    const { cell: sporeCell, celldep } = await findExistedSporeCellAndCelldep(
+    const { cell: sporeCell, cellDep } = await findExistedSporeCellAndCellDep(
       signer.client,
       SporeScript.Spore,
       id,
       sporeScriptInfo,
     );
-    celldep.forEach((value) => celldeps.add(value));
+    tx.addCellDeps(cellDep);
     tx.inputs.push(
       ccc.CellInput.from({
         previousOutput: sporeCell.outPoint,
@@ -233,12 +227,8 @@ export async function transferSpores(params: {
     actions.push(transferSpore);
   }
 
-  // complete cellDeps and cobuild actions
-  await tx.addCellDepInfos(signer.client, [...celldeps]);
   return {
-    tx: await (cobuildRequired(tx)
-      ? prepareSporeTransaction(signer, tx, actions)
-      : signer.prepareTransaction(tx)),
+    tx: await prepareSporeTransaction(signer, tx, actions),
   };
 }
 
@@ -268,15 +258,15 @@ export async function meltSpores(params: {
   const tx = ccc.Transaction.from(params.tx ?? {});
 
   // build spore cell
-  let celldeps: Set<ccc.CellDepInfo> = new Set();
+  let cellDeps: Set<ccc.CellDepInfo> = new Set();
   for (const sporeId of ids) {
-    const { cell: sporeCell, celldep } = await findExistedSporeCellAndCelldep(
+    const { cell: sporeCell, cellDep } = await findExistedSporeCellAndCellDep(
       signer.client,
       SporeScript.Spore,
       sporeId,
       sporeScriptInfo,
     );
-    celldep.forEach((value) => celldeps.add(value));
+    tx.addCellDeps(cellDep);
     tx.inputs.push(
       ccc.CellInput.from({
         previousOutput: sporeCell.outPoint,
@@ -288,12 +278,7 @@ export async function meltSpores(params: {
     actions.push(meltSpore);
   }
 
-  // complete cell deps cobuild actions
-  await tx.addCellDepInfos(signer.client, [...celldeps]);
-
   return {
-    tx: await (cobuildRequired(tx)
-      ? prepareSporeTransaction(signer, tx, actions)
-      : signer.prepareTransaction(tx)),
+    tx: await prepareSporeTransaction(signer, tx, actions),
   };
 }
