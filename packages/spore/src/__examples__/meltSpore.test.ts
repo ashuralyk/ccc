@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { meltSpores } from "..";
+import { meltSpore } from "..";
 
 describe("meltSpore [testnet]", () => {
   expect(process.env.PRIVATE_KEY).toBeDefined();
@@ -13,12 +13,10 @@ describe("meltSpore [testnet]", () => {
     );
 
     // Build transaction
-    let { tx } = await meltSpores({
+    let { tx } = await meltSpore({
       signer,
-      ids: [
-        // Change this if you have a different sporeId
-        "0xd413acd003c0913f0da53fc0ba1c3185d10fad5ebfad9bc449c87e8e7b2efc1d",
-      ],
+      // Change this if you have a different sporeId
+      id: "0xd413acd003c0913f0da53fc0ba1c3185d10fad5ebfad9bc449c87e8e7b2efc1d",
     });
 
     // Complete transaction

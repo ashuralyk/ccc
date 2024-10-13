@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
-import { createSpores } from "..";
+import { createSpore } from "../index.js";
 
 describe("createSpore [testnet]", () => {
   expect(process.env.PRIVATE_KEY).toBeDefined();
@@ -24,21 +24,17 @@ describe("createSpore [testnet]", () => {
     const content = `{"dna":"${hexedDna}"}`;
 
     // Build transaction
-    let { tx, ids } = await createSpores({
+    let { tx, id } = await createSpore({
       signer,
-      spores: [
-        {
-          data: {
-            contentType: "dob/1",
-            content: ccc.bytesFrom(content, "utf8"),
-            clusterId:
-              "0x91b94378902009f359b02ae33613055570e78cd37f364127eb1e4b3a9d77c092",
-          },
-        },
-      ],
+      data: {
+        contentType: "dob/1",
+        content: ccc.bytesFrom(content, "utf8"),
+        clusterId:
+          "0xaf14384d05ef7a9dfaaa51dd6283506ec7a9578ec53ca5ffd23cb790166cbc14",
+      },
       clusterMode: "clusterCell",
     });
-    console.log("sporeIds:", ids);
+    console.log("sporeId:", id);
 
     // Complete transaction
     await tx.completeFeeBy(signer, 1000);
