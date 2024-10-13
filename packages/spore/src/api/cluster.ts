@@ -11,8 +11,7 @@ import {
   SporeScriptInfo,
   buildSporeCellDep,
   buildSporeScript,
-  cobuildRequired,
-  findExistedSporeCellAndCelldep,
+  findExistedSporeCellAndCellDep,
 } from "../predefined/index.js";
 
 /**
@@ -65,9 +64,8 @@ export async function createSporeCluster(params: {
   const output = tx.outputs[tx.outputs.length - 1];
   const createAction = assembleCreateClusterAction(output, packedClusterData);
 
-  // complete celldeps and cobuild actions
-  await tx.addCellDepInfos(
-    signer.client,
+  // complete cellDeps and cobuild actions
+  tx.addCellDeps(
     await buildSporeCellDep(
       signer.client,
       SporeScript.Cluster,
@@ -76,9 +74,7 @@ export async function createSporeCluster(params: {
   );
 
   return {
-    tx: await (cobuildRequired(tx)
-      ? prepareSporeTransaction(signer, tx, [createAction])
-      : signer.prepareTransaction(tx)),
+    tx: await prepareSporeTransaction(signer, tx, [createAction]),
     id,
   };
 }
@@ -109,7 +105,7 @@ export async function transferSporeCluster(params: {
   const tx = ccc.Transaction.from(params.tx ?? {});
 
   // build cluster cell
-  const { cell: cluster, celldep } = await findExistedSporeCellAndCelldep(
+  const { cell: cluster, cellDep } = await findExistedSporeCellAndCellDep(
     signer.client,
     SporeScript.Cluster,
     id,
@@ -136,12 +132,10 @@ export async function transferSporeCluster(params: {
     output,
   );
 
-  // complete celldeps and cobuild actions
-  await tx.addCellDepInfos(signer.client, celldep);
+  // complete cellDeps and cobuild actions
+  tx.addCellDeps(cellDep);
 
   return {
-    tx: await (cobuildRequired(tx)
-      ? prepareSporeTransaction(signer, tx, [transferAction])
-      : signer.prepareTransaction(tx)),
+    tx: await prepareSporeTransaction(signer, tx, [transferAction]),
   };
 }

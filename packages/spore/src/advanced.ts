@@ -6,7 +6,7 @@ import {
   SporeAction,
   WitnessLayout,
 } from "./codec/index.js";
-import { COBUILD_INFO_HASH } from "./predefined/index.js";
+import { COBUILD_INFO_HASH, cobuildRequired } from "./predefined/index.js";
 
 export function assembleCreateSporeAction(
   sporeOutput: ccc.CellOutputLike,
@@ -147,10 +147,10 @@ export function assembleTransferClusterAction(
   };
 }
 
-export function injectCommonCobuildProof(
-  tx: ccc.TransactionLike,
+export function injectCobuild(
+  tx: ccc.Transaction,
   actions: UnpackResult<typeof ActionVec>,
-): ccc.Transaction {
+): void {
   const witnessLayout = ccc.hexFrom(
     WitnessLayout.pack({
       type: "SighashAll",
@@ -162,25 +162,23 @@ export function injectCommonCobuildProof(
       },
     }),
   );
-  const txSkeleton = ccc.Transaction.from(tx);
-  txSkeleton.witnesses.push(ccc.hexFrom(witnessLayout));
-  return txSkeleton;
+  tx.witnesses.push(ccc.hexFrom(witnessLayout));
 }
 
 export function unpackCommonCobuildProof(
   data: ccc.HexLike,
-): UnpackResult<typeof WitnessLayout> | null {
+): UnpackResult<typeof WitnessLayout> | undefined {
   try {
     return WitnessLayout.unpack(ccc.bytesFrom(data));
   } catch {
-    return null;
+    return;
   }
 }
 
-export function unpackCobuildActionsFromTx(
-  tx: ccc.TransactionLike,
+export function extractCobuildActionsFromTx(
+  tx: ccc.Transaction,
 ): UnpackResult<typeof ActionVec> {
-  if (!tx.witnesses || tx.witnesses.length === 0) {
+  if (tx.witnesses.length === 0) {
     return [];
   }
   const witnessLayout = unpackCommonCobuildProof(
@@ -192,18 +190,25 @@ export function unpackCobuildActionsFromTx(
   if (witnessLayout.type !== "SighashAll") {
     throw new Error("Invalid cobuild proof type: " + witnessLayout.type);
   }
+
+  // Remove existed cobuild witness
+  tx.witnesses.pop();
   return witnessLayout.value.message.actions;
 }
 
 export async function prepareSporeTransaction(
   signer: ccc.Signer,
-  tx: ccc.TransactionLike,
+  txLike: ccc.TransactionLike,
   actions: UnpackResult<typeof ActionVec>,
 ): Promise<ccc.Transaction> {
-  const existedActions = unpackCobuildActionsFromTx(tx);
-  if (existedActions.length > 0) {
-    tx.witnesses!.pop();
+  let tx = ccc.Transaction.from(txLike);
+
+  if (!(await cobuildRequired(signer.client, tx))) {
+    return signer.prepareTransaction(tx);
   }
+
+  const existedActions = extractCobuildActionsFromTx(tx);
   tx = await signer.prepareTransaction(tx);
-  return injectCommonCobuildProof(tx, [...existedActions, ...actions]);
+  injectCobuild(tx, [...existedActions, ...actions]);
+  return tx;
 }

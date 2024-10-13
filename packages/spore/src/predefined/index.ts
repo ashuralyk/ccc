@@ -1,18 +1,18 @@
 import { ccc } from "@ckb-ccc/core";
 import { ScriptInfo, SporeScript, SporeScriptInfo } from "./base.js";
 import * as did from "./did.js";
-import * as spore_v1 from "./spore_v1.js";
-import * as spore_v2 from "./spore_v2.js";
+import * as sporeV1 from "./sporeV1.js";
+import * as sporeV2 from "./sporeV2.js";
 export * from "./base.js";
 
 const SPORE_MAINNET_SCRIPTS_COLLECTION = [
-  spore_v2.SPORE_MAINNET_SCRIPTS,
+  sporeV2.SPORE_MAINNET_SCRIPTS,
   did.DID_MAINNET_SCRIPTS,
 ];
 
 const SPORE_TESTNET_SCRIPTS_COLLECTION = [
-  spore_v1.SPORE_TESTNET_SCRIPTS,
-  spore_v2.SPORE_TESTNET_SCRIPTS,
+  sporeV1.SPORE_TESTNET_SCRIPTS,
+  sporeV2.SPORE_TESTNET_SCRIPTS,
   did.DID_TESTNET_SCRIPTS,
 ];
 
@@ -35,14 +35,14 @@ function getScriptInfoByCodeHash(
   }
 }
 
-export async function findExistedSporeCellAndCelldep(
+export async function findExistedSporeCellAndCellDep(
   client: ccc.Client,
   protocol: SporeScript,
   args: ccc.HexLike,
   scriptInfo?: SporeScriptInfo,
 ): Promise<{
   cell: ccc.Cell;
-  celldep: ccc.CellDepInfo[];
+  cellDep: ccc.CellDep[];
 }> {
   if (scriptInfo) {
     const script = buildSporeScript(client, protocol, args, scriptInfo);
@@ -50,7 +50,7 @@ export async function findExistedSporeCellAndCelldep(
     if (cell) {
       return {
         cell,
-        celldep: await buildSporeCellDep(client, protocol, scriptInfo),
+        cellDep: await buildSporeCellDep(client, protocol, scriptInfo),
       };
     }
     throw new Error(
@@ -69,7 +69,7 @@ export async function findExistedSporeCellAndCelldep(
     if (cell) {
       return {
         cell,
-        celldep: await buildSporeCellDep(client, protocol, scriptInfo),
+        cellDep: await buildSporeCellDep(client, protocol, scriptInfo),
       };
     }
   }
@@ -85,8 +85,8 @@ export function buildSporeScript(
   const collection =
     scriptInfo ??
     (client.addressPrefix === "ckb"
-      ? spore_v2.SPORE_MAINNET_SCRIPTS
-      : spore_v2.SPORE_TESTNET_SCRIPTS);
+      ? sporeV2.SPORE_MAINNET_SCRIPTS
+      : sporeV2.SPORE_TESTNET_SCRIPTS);
 
   return ccc.Script.from({
     args,
@@ -98,33 +98,23 @@ export async function buildSporeCellDep(
   client: ccc.Client,
   protocol: SporeScript,
   scriptInfo?: SporeScriptInfo,
-): Promise<ccc.CellDepInfo[]> {
+): Promise<ccc.CellDep[]> {
   const info =
     scriptInfo ??
     (client.addressPrefix === "ckb"
-      ? spore_v2.SPORE_MAINNET_SCRIPTS
-      : spore_v2.SPORE_TESTNET_SCRIPTS);
+      ? sporeV2.SPORE_MAINNET_SCRIPTS
+      : sporeV2.SPORE_TESTNET_SCRIPTS);
 
   const config = info[protocol];
-  if (config.dynamicCelldep) {
-    const cell = await client.findSingletonCellByType(config.dynamicCelldep);
-    if (!cell) {
-      throw new Error(`Dynamic celldep not found of protocol: ${protocol}`);
-    }
-    return [
-      ccc.CellDepInfo.from({
-        cellDep: {
-          outPoint: cell!.outPoint,
-          depType: "code",
-        },
-      }),
-    ];
-  }
-
-  return config.cellDeps.map(ccc.CellDepInfo.from);
+  return client.getCellDeps(config.cellDeps);
 }
 
-export function cobuildRequired(tx: ccc.Transaction): boolean {
+export async function cobuildRequired(
+  client: ccc.Client,
+  txLike: ccc.TransactionLike,
+): Promise<boolean> {
+  const tx = ccc.Transaction.from(txLike);
+
   const checkCodeHash = (codeHash: ccc.HexLike | undefined) => {
     if (!codeHash) {
       return false;
@@ -133,13 +123,14 @@ export function cobuildRequired(tx: ccc.Transaction): boolean {
     if (!scriptInfo) {
       return false;
     }
-    return scriptInfo.cobuild === true;
+    return scriptInfo.cobuild ?? false;
   };
-  const inputIndex = tx.inputs.findIndex((input) => {
-    return checkCodeHash(input.cellOutput?.type?.codeHash);
-  });
-  const outputIndex = tx.outputs.findIndex((output) => {
-    return checkCodeHash(output.type?.codeHash);
-  });
-  return inputIndex > -1 || outputIndex > -1;
+
+  for (const input of tx.inputs) {
+    await input.completeExtraInfos(client);
+    if (checkCodeHash(input.cellOutput?.type?.codeHash)) {
+      return true;
+    }
+  }
+  return tx.outputs.some((output) => checkCodeHash(output.type?.codeHash));
 }
