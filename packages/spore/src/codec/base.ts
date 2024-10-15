@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { BytesLike, molecule } from "@ckb-lumos/codec";
-import { bytify } from "@ckb-lumos/codec/lib/bytes";
+import { molecule } from "@ckb-lumos/codec";
 
 /**
  * The codec for packing/unpacking UTF-8 raw strings.
@@ -8,5 +7,5 @@ import { bytify } from "@ckb-lumos/codec/lib/bytes";
  */
 export const RawString = molecule.byteVecOf({
   pack: (packable: string) => ccc.bytesFrom(packable, "utf8"),
-  unpack: (unpackable: BytesLike) => ccc.bytesTo(bytify(unpackable), "utf8"),
+  unpack: (unpackable: ccc.BytesLike) => ccc.bytesTo(unpackable, "utf8"),
 });
