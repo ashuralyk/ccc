@@ -60,8 +60,10 @@ export async function assertSpore(
  * @param data specific format of data required by Spore protocol
  * @param to owner of new spore cell, signer if no provided
  * @param clusterMode how to process cluster cell **(if clusterId is not provided in SporeData, this parameter will be ignored)**
+ *   - undefined: error if the spore has a cluster but the clusterMode is not set
  *   - lockProxy: put a cell that uses the same lock from Cluster cell in both Inputs and Outputs
  *   - clusterCell: directly put Cluster cell in Inputs and Outputs
+ *   - skip: don't handle the cluster logic
  * @param tx the transaction skeleton, if not provided, a new one will be created
  * @param scriptInfo the script info of Spore cell, if not provided, the default script info will be used
  * @param scriptInfoHash the script info hash used in cobuild
@@ -73,7 +75,7 @@ export async function createSpore(params: {
   signer: ccc.Signer;
   data: SporeData;
   to?: ccc.ScriptLike;
-  clusterMode?: "lockProxy" | "clusterCell";
+  clusterMode?: "lockProxy" | "clusterCell" | "skip";
   tx?: ccc.TransactionLike;
   scriptInfo?: SporeScriptInfoLike;
   scriptInfoHash?: ccc.HexLike;

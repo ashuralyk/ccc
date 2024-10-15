@@ -9,12 +9,16 @@ export async function prepareCluster(
   signer: ccc.Signer,
   tx: ccc.Transaction,
   data: SporeData,
-  clusterMode?: "lockProxy" | "clusterCell",
+  clusterMode?: "lockProxy" | "clusterCell" | "skip",
   scriptInfoHash?: ccc.HexLike,
 ): Promise<UnpackResult<typeof Action> | undefined> {
   // skip if the spore is not belong to a cluster
-  if (!clusterMode || !data.clusterId) {
+  if (!data.clusterId || clusterMode === "skip") {
     return;
+  }
+
+  if (!clusterMode) {
+    throw Error("clusterMode is undefined but the spore has a cluster");
   }
 
   const { cell: cluster, scriptInfo } = await assertCluster(
