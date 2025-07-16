@@ -1,10 +1,8 @@
 import { Transaction, TransactionLike } from "../../ckb/index.js";
 import { Client } from "../../client/index.js";
 import { hexConcat, hexFrom, HexLike } from "../../hex/index.js";
-import {
-  MultisigInfoLike,
-  SignerCkbMultisigReadonly,
-} from "./signerCkbMultisigReadonly.js";
+import { MultisigInfoLike } from "../../multisig/index.js";
+import { SignerCkbMultisigReadonly } from "./signerCkbMultisigReadonly.js";
 import { SignerCkbPrivateKey } from "./signerCkbPrivateKey.js";
 
 /**
@@ -21,11 +19,15 @@ export class SignerCkbMultisig extends SignerCkbMultisigReadonly {
   ) {
     super(client, multisigInfoLike);
     this.signer = new SignerCkbPrivateKey(client, privateKey);
+
+    if (!this.multisigInfo.containPubkey(this.signer.publicKey)) {
+      throw new Error("Private key is not in the multisig info");
+    }
   }
 
   async signOnlyTransaction(txLike: TransactionLike): Promise<Transaction> {
     let lastIndex = -1;
-    let tx = Transaction.from(txLike);
+    const tx = Transaction.from(txLike);
     const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
 
     for (const { script } of await this.getRelatedScripts(tx)) {
@@ -39,38 +41,17 @@ export class SignerCkbMultisig extends SignerCkbMultisigReadonly {
         lastIndex = index;
       }
 
-      let witness = tx.getWitnessArgsAt(index);
-      if (!witness || !witness.lock?.startsWith(this.multisigInfo.metadata)) {
-        tx = await this.prepareTransaction(tx);
-      }
-
-      witness = tx.getWitnessArgsAt(index);
+      const witness = tx.getWitnessArgsAt(index);
       if (!witness || !witness.lock) {
         throw new Error("Multisig witness not prepared");
       }
 
-      // Signatures array is placed after the multisig metadata, in 65 bytes per signature
-      const signatures =
-        witness.lock
-          .slice(this.multisigInfo.metadata.length)
-          .match(/.{1,130}/g)
-          ?.map(hexFrom) || [];
-      const insertIndex = signatures.findIndex((sig) => sig === emptySignature);
-      if (signatures.length !== this.multisigInfo.threshold) {
-        throw new Error(
-          `Not enough signature slots to threshold (${signatures.length}/${this.multisigInfo.threshold})`,
-        );
-      }
-      if (insertIndex === -1) {
-        // Signatures have been filled
-        continue;
-      }
-
       // Empty multisig witness for current signing
+      const rawWitnessLock = witness.lock;
       witness.lock = hexConcat(
-        this.multisigInfo.metadata,
+        this.multisigInfo.metadata.toBytes(),
         ...Array.from(
-          new Array(this.multisigInfo.threshold),
+          new Array(this.multisigInfo.metadata.threshold),
           () => emptySignature,
         ),
       );
@@ -79,11 +60,12 @@ export class SignerCkbMultisig extends SignerCkbMultisigReadonly {
       if (!info) {
         continue;
       }
-
       const signature = await this.signer._signMessage(info.message);
-      signatures[insertIndex] = signature;
 
-      witness.lock = hexConcat(this.multisigInfo.metadata, ...signatures);
+      witness.lock = this.multisigInfo.insertSignature(
+        rawWitnessLock,
+        signature,
+      );
       tx.setWitnessArgsAt(index, witness);
     }
 

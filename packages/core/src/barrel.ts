@@ -8,6 +8,7 @@ export * from "./hex/index.js";
 export * from "./jsonRpc/index.js";
 export * from "./keystore/index.js";
 export * from "./molecule/index.js";
+export * from "./multisig/index.js";
 export * from "./num/index.js";
 export * from "./signer/index.js";
 export * from "./utils/index.js";

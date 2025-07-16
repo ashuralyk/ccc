@@ -1,126 +1,9 @@
 import { Address } from "../../address/index.js";
-import {
-  Script,
-  SinceLike,
-  Transaction,
-  TransactionLike,
-} from "../../ckb/index.js";
-import { CellDepInfo, Client, KnownScript } from "../../client/index.js";
-import { Hex, hexConcat, hexFrom, HexLike } from "../../hex/index.js";
-import {
-  hashCkb,
-  numToBytes,
-  ScriptLike,
-  Since,
-  WitnessArgs,
-} from "../../index.js";
+import { Script, Transaction, TransactionLike } from "../../ckb/index.js";
+import { CellDepInfo, Client } from "../../client/index.js";
+import { ScriptLike, WitnessArgs } from "../../index.js";
+import { MultisigInfo, MultisigInfoLike } from "../../multisig/index.js";
 import { Signer, SignerSignType, SignerType } from "../signer/index.js";
-
-export const MULTISIG_SCRIPT_DEFAULT = KnownScript.Secp256k1MultisigV2;
-export const MULTISIG_SCRIPTS = [
-  KnownScript.Secp256k1MultisigV2,
-  KnownScript.Secp256k1Multisig,
-];
-
-export type MultisigInfoLike = {
-  pubkeys: HexLike[];
-  threshold: number;
-  mustMatch: number;
-  since?: SinceLike;
-  multisigScript?:
-    | KnownScript.Secp256k1Multisig
-    | KnownScript.Secp256k1MultisigV2;
-};
-
-/**
- * A class representing multisig information, holding information ingredients and containing utilities.
- * @public
- */
-export class MultisigInfo {
-  public readonly pubkeys: Hex[];
-  public readonly threshold: number;
-  public readonly mustMatch: number;
-  public readonly since?: Since;
-  public readonly knownMultisigScript:
-    | KnownScript.Secp256k1Multisig
-    | KnownScript.Secp256k1MultisigV2;
-
-  public readonly pubkeyBlake160Hashes: Hex[];
-  public readonly metadata: Hex;
-
-  private constructor(multisig: MultisigInfoLike) {
-    this.pubkeys = multisig.pubkeys.map(hexFrom);
-    this.threshold = multisig.threshold;
-    this.mustMatch = multisig.mustMatch;
-    this.since = multisig.since ? Since.from(multisig.since) : undefined;
-    this.knownMultisigScript =
-      multisig.multisigScript ?? MULTISIG_SCRIPT_DEFAULT;
-    if (this.knownMultisigScript !== MULTISIG_SCRIPT_DEFAULT) {
-      console.warn(
-        `Multisig script '${this.knownMultisigScript}' is marked as **Deprecated**, please using '${MULTISIG_SCRIPT_DEFAULT}' instead`,
-      );
-    }
-    if (this.threshold < 0 || this.threshold > 255) {
-      throw new Error("`threshold` must be positive and less than 256!");
-    }
-    if (this.mustMatch < 0 || this.mustMatch > 255) {
-      throw new Error("`mustMatch` must be positive and less than 256!");
-    }
-    if (this.mustMatch > this.threshold) {
-      throw new Error("`mustMatch` must be less than or equal to `threshold`!");
-    }
-    if (
-      this.pubkeys.length < this.mustMatch ||
-      this.pubkeys.length < this.threshold ||
-      this.pubkeys.length > 255
-    ) {
-      throw new Error(
-        "length of `pubkeys` must be greater than or equal to `mustMatch` and `threshold` and less than 256!",
-      );
-    }
-    this.pubkeyBlake160Hashes = this.pubkeys.map(
-      (pubkey) => hashCkb(hexFrom(pubkey)).slice(0, 42) as Hex,
-    );
-    this.metadata = hexConcat(
-      "0x00",
-      hexFrom(numToBytes(this.mustMatch)),
-      hexFrom(numToBytes(this.threshold)),
-      hexFrom(numToBytes(this.pubkeyBlake160Hashes.length)),
-      ...this.pubkeyBlake160Hashes,
-    );
-  }
-
-  static from(multisig: MultisigInfoLike): MultisigInfo {
-    return new MultisigInfo(multisig);
-  }
-
-  multisigScriptArgs(): Hex {
-    const metadataBlake160Hash = hashCkb(this.metadata).slice(0, 42) as Hex;
-    if (this.since) {
-      const sinceBytes = this.since.toBytes();
-      return hexConcat(metadataBlake160Hash, hexFrom(sinceBytes));
-    } else {
-      return metadataBlake160Hash;
-    }
-  }
-
-  async defaultMultisigScript(client: Client): Promise<Script> {
-    return await Script.fromKnownScript(
-      client,
-      this.knownMultisigScript,
-      this.multisigScriptArgs(),
-    );
-  }
-
-  async multisigScripts(client: Client): Promise<Script[]> {
-    const args = this.multisigScriptArgs();
-    return await Promise.all(
-      MULTISIG_SCRIPTS.map(async (script) => {
-        return await Script.fromKnownScript(client, script, args);
-      }),
-    );
-  }
-}
 
 /**
  * A class extending Signer that provides access to a CKB multisig script.
@@ -177,11 +60,17 @@ export class SignerCkbMultisigReadonly extends Signer {
     );
   }
 
+  /**
+   * Get related scripts from the transaction. Consider all of potential multisig scripts.
+   *
+   * @param txLike - The transaction to get related scripts from.
+   * @returns A promise that resolves to an array of related scripts.
+   */
   async getRelatedScripts(
     txLike: TransactionLike,
   ): Promise<{ script: Script; cellDeps: CellDepInfo[] }[]> {
     const tx = Transaction.from(txLike);
-    const multisig = await this.getAddressObjSecp256k1();
+    const multisig = await this.getAddressObjs();
 
     const scripts: { script: Script; cellDeps: CellDepInfo[] }[] = [];
     for (const input of tx.inputs) {
@@ -193,7 +82,7 @@ export class SignerCkbMultisigReadonly extends Signer {
         continue;
       }
 
-      if (lock.eq(multisig.script)) {
+      if (multisig.some((address) => address.script.eq(lock))) {
         const scriptInfo = await this.client.findKnownScript(lock);
         if (scriptInfo) {
           scripts.push({
@@ -224,27 +113,8 @@ export class SignerCkbMultisigReadonly extends Signer {
       return;
     }
 
-    // Prepare signature placeholder
-    const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
-    const signaturePlaceholder = hexConcat(
-      ...Array.from(
-        new Array(this.multisigInfo.threshold),
-        () => emptySignature,
-      ),
-    );
-
-    // Check if the multisig witness is already prepared
     const witness = tx.getWitnessArgsAt(position) ?? WitnessArgs.from({});
-    if (
-      witness.lock?.startsWith(this.multisigInfo.metadata) &&
-      witness.lock.length ===
-        this.multisigInfo.metadata.length + signaturePlaceholder.slice(2).length
-    ) {
-      return;
-    }
-
-    // Reset multisig witness to signature placeholder
-    witness.lock = hexConcat(this.multisigInfo.metadata, signaturePlaceholder);
+    witness.lock = this.multisigInfo.prepareWitnessLock(witness.lock ?? "");
     tx.setWitnessArgsAt(position, witness);
   }
 
@@ -278,7 +148,6 @@ export class SignerCkbMultisigReadonly extends Signer {
     restrict: boolean = false,
   ): Promise<boolean> {
     const tx = Transaction.from(txLike);
-    const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
 
     for (const { script } of await this.getRelatedScripts(tx)) {
       const index = await tx.findInputIndexByLock(script, this.client);
@@ -290,27 +159,11 @@ export class SignerCkbMultisigReadonly extends Signer {
       }
 
       const witness = tx.getWitnessArgsAt(index);
-      if (!witness || !witness.lock?.startsWith(this.multisigInfo.metadata)) {
+      if (!witness || !witness.lock) {
         return false;
       }
 
-      const signatures =
-        witness.lock
-          .slice(this.multisigInfo.metadata.length)
-          .match(/.{1,130}/g)
-          ?.map(hexFrom) || [];
-      if (signatures.length !== this.multisigInfo.threshold) {
-        if (restrict) {
-          throw new Error(
-            `Not enough signatures to threshold (${signatures.length}/${this.multisigInfo.threshold})`,
-          );
-        }
-        return false;
-      }
-      if (
-        signatures.filter((sig) => sig !== emptySignature).length <
-        this.multisigInfo.threshold
-      ) {
+      if (!this.multisigInfo.checkSignaturesFulfilled(witness.lock, restrict)) {
         return false;
       }
     }

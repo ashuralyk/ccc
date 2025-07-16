@@ -19,7 +19,7 @@ const publicKeys = signers.map((signer) => signer.publicKey);
 const multisigSigners = signers.map(
   (signer) =>
     new ccc.SignerCkbMultisig(signer.client, signer.privateKey, {
-      pubkeys: publicKeys,
+      keys: publicKeys.map((pubkey) => ({ pubkey })),
       threshold: 2,
       mustMatch: 0,
     }),
