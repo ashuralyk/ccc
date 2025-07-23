@@ -61,16 +61,17 @@ export class Metadata {
     }
     switch (version) {
       case MetadataVersion.Multisig: {
+        const pkLen = 20;
         const mustMatch = bytes[1];
         const threshold = bytes[2];
         const pubkeyCount = bytes[3];
-        if (pubkeyCount !== bytes.length - 4) {
+        if (pubkeyCount * pkLen !== bytes.length - 4) {
           throw new Error("Invalid metadata bytes!");
         }
         const pubkeyBlake160Hashes: Hex[] = [];
         for (let i = 0; i < pubkeyCount; i++) {
-          const start = 4 + i * 20;
-          const end = start + 20;
+          const start = 4 + i * pkLen;
+          const end = start + pkLen;
           pubkeyBlake160Hashes.push(hexFrom(bytes.slice(start, end)));
         }
         return new Metadata({
