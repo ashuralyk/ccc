@@ -18,9 +18,8 @@ const signers = [
 const threshold = 2;
 const firstNthMustMatch = 0;
 
-const publicKeys = signers.map((signer) => signer.publicKey);
 const multisigInfo = ccc.MultisigInfo.from({
-  pubkeys: publicKeys,
+  keys: signers.map((signer) => ({ pubkey: signer.publicKey })),
   threshold,
   mustMatch: firstNthMustMatch,
 });
