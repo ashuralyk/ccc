@@ -28,7 +28,7 @@ export class SignerCkbMultisig extends SignerCkbMultisigReadonly {
   async signOnlyTransaction(txLike: TransactionLike): Promise<Transaction> {
     let lastIndex = -1;
     const tx = Transaction.from(txLike);
-    const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
+    const emptySignature = hexFrom(new Uint8Array(65).fill(0));
 
     for (const { script } of await this.getRelatedScripts(tx)) {
       const index = await tx.findInputIndexByLock(script, this.client);

@@ -16,9 +16,6 @@ export type MultisigInfoLike = {
   threshold: number;
   mustMatch: number;
   since?: SinceLike;
-  multisigScript?:
-    | KnownScript.Secp256k1Multisig
-    | KnownScript.Secp256k1MultisigV2;
 };
 
 /**
@@ -28,9 +25,6 @@ export type MultisigInfoLike = {
 export class MultisigInfo {
   public readonly metadata: Metadata;
   public readonly since?: Since;
-  public readonly knownMultisigScript:
-    | KnownScript.Secp256k1Multisig
-    | KnownScript.Secp256k1MultisigV2;
 
   private constructor(multisig: MultisigInfoLike) {
     this.metadata = Metadata.from({
@@ -39,13 +33,6 @@ export class MultisigInfo {
       mustMatch: multisig.mustMatch,
     });
     this.since = multisig.since ? Since.from(multisig.since) : undefined;
-    this.knownMultisigScript =
-      multisig.multisigScript ?? MULTISIG_SCRIPT_DEFAULT;
-    if (this.knownMultisigScript !== MULTISIG_SCRIPT_DEFAULT) {
-      console.warn(
-        `Multisig script '${this.knownMultisigScript}' is marked as **Deprecated**, please using '${MULTISIG_SCRIPT_DEFAULT}' instead`,
-      );
-    }
   }
 
   static from(multisig: MultisigInfoLike): MultisigInfo {
@@ -72,7 +59,7 @@ export class MultisigInfo {
   async defaultMultisigScript(client: Client): Promise<Script> {
     return await Script.fromKnownScript(
       client,
-      this.knownMultisigScript,
+      MULTISIG_SCRIPT_DEFAULT,
       this.multisigScriptArgs(),
     );
   }
@@ -90,7 +77,7 @@ export class MultisigInfo {
     switch (this.metadata.version) {
       case MetadataVersion.Multisig: {
         // Prepare signature placeholder
-        const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
+        const emptySignature = hexFrom(new Uint8Array(65).fill(0));
         const signaturePlaceholder = hexConcat(
           ...Array.from(
             new Array(this.metadata.threshold),
@@ -127,7 +114,7 @@ export class MultisigInfo {
 
     switch (this.metadata.version) {
       case MetadataVersion.Multisig: {
-        const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
+        const emptySignature = hexFrom(new Uint8Array(65).fill(0));
         if (!witnessLock.startsWith(metadataBytes)) {
           return false;
         }
@@ -177,7 +164,7 @@ export class MultisigInfo {
         }
 
         // Signatures array is placed after the multisig metadata, in 65 bytes per signature
-        const emptySignature = hexFrom(Array.from(new Array(65), () => 0));
+        const emptySignature = hexFrom(new Uint8Array(65).fill(0));
         const signatures =
           witnessLock
             .slice(metadataBytes.length)
