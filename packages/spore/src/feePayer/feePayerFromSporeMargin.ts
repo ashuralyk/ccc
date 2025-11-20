@@ -22,7 +22,6 @@ export class FeePayerFromSporeMargin extends ccc.FeePayer {
         continue;
       }
       const margin = tx.getOutputCapacityMargin(i);
-      console.log("spore cell found", margin, feeFromMargin);
       if (margin < feeFromMargin) {
         feeFromMargin -= margin;
         tx.outputs[i].capacity -= margin;
@@ -34,7 +33,9 @@ export class FeePayerFromSporeMargin extends ccc.FeePayer {
     }
 
     if (feeFromMargin > 0) {
-      throw new Error("Insufficient capacity for paying fee from Spore margin");
+      throw new Error(
+        `Insufficient capacity for paying fee from Spore margin, unresolved fee: ${feeFromMargin}`,
+      );
     }
   }
 }
