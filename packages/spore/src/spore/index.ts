@@ -10,7 +10,7 @@ import {
   packRawSporeData,
   unpackToRawSporeData,
 } from "../codec/index.js";
-import { findSingletonCellByArgs } from "../helper/index.js";
+import { ONE_CKB, findSingletonCellByArgs } from "../helper/index.js";
 import {
   SporeScriptInfo,
   SporeScriptInfoLike,
@@ -92,11 +92,13 @@ export async function createSpore(params: {
   tx?: ccc.TransactionLike;
   scriptInfo?: SporeScriptInfoLike;
   scriptInfoHash?: ccc.HexLike;
+  marginCapacity?: ccc.NumLike;
 }): Promise<{
   tx: ccc.Transaction;
   id: ccc.Hex;
 }> {
-  const { signer, data, to, clusterMode, scriptInfoHash } = params;
+  const { signer, data, to, clusterMode, scriptInfoHash, marginCapacity } =
+    params;
   const scriptInfo = params.scriptInfo ?? getSporeScriptInfo(signer.client);
 
   // prepare transaction
@@ -112,7 +114,7 @@ export async function createSpore(params: {
   ids.push(id);
 
   const packedData = packRawSporeData(data);
-  tx.addOutput(
+  const outputLen = tx.addOutput(
     {
       lock: to ?? lock,
       type: {
@@ -122,6 +124,14 @@ export async function createSpore(params: {
     },
     packedData,
   );
+
+  // Add margin capacity if specified
+  if (marginCapacity) {
+    const margin = ccc.numFrom(marginCapacity);
+    tx.outputs[outputLen - 1].capacity += margin;
+  } else {
+    tx.outputs[outputLen - 1].capacity += ONE_CKB;
+  }
 
   // create spore action
   if (scriptInfo.cobuild) {
@@ -189,11 +199,17 @@ export async function transferSpore(params: {
     sporeCell.outputData,
   );
 
+  // adjust capacity to cover previous margin
+  const outputIndex = tx.outputs.length - 1;
+  if (tx.outputs[outputIndex].capacity < sporeCell.cellOutput.capacity) {
+    tx.outputs[outputIndex].capacity = sporeCell.cellOutput.capacity;
+  }
+
   const actions = sporeScriptInfo.cobuild
     ? [
         assembleTransferSporeAction(
           sporeCell.cellOutput,
-          tx.outputs[tx.outputs.length - 1],
+          tx.outputs[outputIndex],
           scriptInfoHash,
         ),
       ]

@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import "dotenv/config";
 import { describe, expect, it } from "vitest";
 import { findSporeClustersBySigner } from "../cluster";
 

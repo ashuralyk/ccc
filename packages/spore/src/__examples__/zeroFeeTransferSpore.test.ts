@@ -2,12 +2,13 @@ import { ccc } from "@ckb-ccc/core";
 import { JsonRpcTransformers } from "@ckb-ccc/core/advanced";
 import "dotenv/config";
 import { describe, expect, it } from "vitest";
-import { transferSporeCluster } from "..";
+import { FeePayerFromSporeMargin } from "../feePayer/feePayerFromSporeMargin.js";
+import { transferSpore } from "../index.js";
 
-describe("transferCluster [testnet]", () => {
+describe("transferSpore [testnet]", () => {
   expect(process.env.PRIVATE_KEY).toBeDefined();
 
-  it("should transfer a Cluster cell by sporeId", async () => {
+  it("should transfer a Spore cell by sporeId with zero fee", async () => {
     const client = new ccc.ClientPublicTestnet();
     const signer = new ccc.SignerCkbPrivateKey(
       client,
@@ -21,19 +22,21 @@ describe("transferCluster [testnet]", () => {
     );
 
     // Build transaction
-    let { tx } = await transferSporeCluster({
+    let { tx } = await transferSpore({
       signer,
-      id: "0xcf95169f4843b7647837c7cf7e54e5ce7fbc3c7a5ce3c56898b54525d40d72d6",
+      // Change this if you have a different sporeId
+      id: "0x59a43d2735d3e87c356a852eb0a8eba485182695aeb7605e1635eed4dce01689",
       to: owner.script,
     });
 
     // Complete transaction
-    await tx.completeFeeBy(signer);
+    const marginPayer = new FeePayerFromSporeMargin();
+    await tx.completeByFeePayer(client, marginPayer, signer);
     tx = await signer.signTransaction(tx);
     console.log(JSON.stringify(JsonRpcTransformers.transactionFrom(tx)));
 
     // Send transaction
-    const txHash = await signer.sendTransaction(tx);
+    const txHash = await signer.client.sendTransaction(tx);
     console.log(txHash);
   }, 60000);
 });
